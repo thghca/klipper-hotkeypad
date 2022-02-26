@@ -3,13 +3,12 @@ import configparser
 import logging
 import os
 import select
-import string
 import time
 import sys
 import signal
-import requests
 import argparse
 
+import requests
 from evdev import InputDevice, categorize, ecodes
 
 DROP_EVENT_OLDER_SEC = 1.0
