@@ -4,7 +4,7 @@ A python script to control klipper wuth usb numpad
 ## Installation (raspbian)
 1. copy klipper-hotkeypad folder to /home/pi
 2. install python3
-3. install requests and evdev pascages
+3. install requests and evdev packages
 4. edit config (see below)
 5. run start.bat
 
