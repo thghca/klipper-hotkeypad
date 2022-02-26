@@ -6,7 +6,7 @@ A python script to control klipper wuth usb numpad
 2. install python3
 3. install requests and evdev packages
 4. edit config (see below)
-5. run start.bat
+5. run start.sh
 
 ## Runing as service (raspbian)
 1. edit hotkeypad.rules: replace product and vendor ids with ones from your numpad
