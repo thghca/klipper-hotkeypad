@@ -1,0 +1,16 @@
+[Unit]
+Description=Hotkeypad: Script for control klipper with numpad
+BindsTo=dev-hotkeypad.device
+StopWhenUnneeded=yes
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/klipper-hotkeypad/
+ExecStart=python3 /home/pi/klipper-hotkeypad/hotkeypad.py
+RestartSec=1
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

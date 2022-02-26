@@ -1,0 +1,4 @@
+# Replace product id and vendor id with yours numpad
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="1c4f", ATTR{idProduct}=="0002", SYMLINK+="hotkeypad" TAG+="systemd", ENV{SYSTEMD_ALIAS}="/dev/hotkeypad", ENV{SYSTEMD_WANTS}="hotkeypad.service"
+# Workaround for removing device. Replace ids here too
+ACTION=="remove", SUBSYSTEM=="usb", ENV{PRODUCT}=="1c4f/2/*", TAG+="systemd"
