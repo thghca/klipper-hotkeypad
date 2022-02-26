@@ -1,101 +1,115 @@
 #!/usr/bin/python -u
+import configparser
+import logging
+import os
 import select
+import string
 import time
 import sys
 import signal
+import requests
+import argparse
 
 from evdev import InputDevice, categorize, ecodes
-from requests import post
 
-DEBUG = True
-DEBUG_PRINT_UNKNOWN_EVENTS = True
-DEBUG_PRINT_KNOWN_KEYS = False
-DEBUG_PRINT_UNKNOWN_KEYS =True
 DROP_EVENT_OLDER_SEC = 1.0
+DEFAULT_CONFIG_NAME = 'config.cfg'
 
-# Mediana m-kn-np674 numpad
-KEYBOARDS = (
-    # Regular numpad keys + tab
-    '/dev/input/by-id/usb-SIGMACHIP_USB_Keyboard-event-kbd',
-    # Home, mail and calc buttons. No hold events
-    '/dev/input/by-id/usb-SIGMACHIP_USB_Keyboard-event-if01')
-
-mapping = {
-    #row1
-    "KEY_HOMEPAGE": None,
-    "KEY_TAB": None,
-    "KEY_MAIL": None,
-    "KEY_CALC": None,  
-    #row2
-    "KEY_NUMLOCK": None,
-    "KEY_KPSLASH": None,
-    "KEY_KPASTERISK": None,
-    "KEY_BACKSPACE": None,
-    #row3
-    "KEY_KP7": None,
-    "KEY_KP8": None,
-    "KEY_KP9": None,
-    "KEY_KPMINUS": None,
-    #row4
-    "KEY_KP4": None,
-    "KEY_KP5": None,
-    "KEY_KP6": None,
-    "KEY_KPPLUS": None,
-    #row5
-    "KEY_KP1": None,
-    "KEY_KP2": None,
-    "KEY_KP3": None,
-    "KEY_KPENTER": "_PAUSERESUME",
-    #row6
-    "KEY_KP0": None,
-    "KEY_KPSPACE": None,
-    "KEY_KPDOT": None,
-}
-
+config_path = os.path.join(os.path.dirname(__file__), DEFAULT_CONFIG_NAME)
+mapping = {}
 devices = {}
+host = '127.0.0.1'
+print_key_events = False
 
 def send_gcode(cmd):
     #Request blocks thread. Fix?
-    post('http://127.0.0.1/printer/gcode/script', data={'script': cmd})
+    requests.post('http://{}/printer/gcode/script'.format(host), data={'script': cmd})
+
+def send_device_toggle(device):
+    #Request blocks thread. Fix?
+    requests.post('http://{}/machine/device_power/device'.format(host), data={'device': device, 'action': 'toggle'})
+
+def system_call(cmd):
+    os.system(cmd)
 
 def grab_keyboards():
     for fd, kbd in devices.items():
         kbd.grab()
-        if DEBUG:
-            print("grabbed {}".format(kbd.name))
+        logging.info("grabbed {}".format(kbd.name))
     
 def ungrab_keyboards():
     for fd, kbd in devices.items():
-        kbd.ungrab()
-        if DEBUG:
-            print("ungrabbed {}".format(kbd.name))
+        try:
+            kbd.ungrab()
+            logging.info("ungrabbed {}".format(kbd.name))
+        except OSError as ex:
+            if ex.args[0] == 19:
+                logging.warning("ungrab {} fail, device disconnected?".format(kbd.name))
+            else:
+                raise
+
+def run_actions(actions):
+    for (action, arg) in actions:
+        if action == 'gcode':
+            send_gcode(arg)
+        elif action == 'dev':
+            send_device_toggle(arg)
+        elif action == 'exec':
+            system_call(arg)
 
 def process_key_event(event):
-    known = event.keycode in mapping
-    if known and DEBUG_PRINT_KNOWN_KEYS or not known and DEBUG_PRINT_UNKNOWN_KEYS:
-            print("keycode: {}, scancode: {}, state:{}".format(event.keycode, event.scancode , ("up", "down", "hold")[event.keystate]))   
+    if print_key_events:
+        print("keycode: {}, scancode: {}, state:{}".format(event.keycode, event.scancode , ("up", "down", "hold")[event.keystate]))   
     if event.keystate == event.key_down:
-        cmd = mapping.get(event.keycode)
-        if cmd is not None:
-            send_gcode(cmd)
+        actions = mapping.get(event.keycode)
+        if actions is not None:
+            run_actions(actions)   
     elif event.keystate == event.key_up:
         pass
     elif event.keystate == event.key_hold:
         pass
 
 
-def terminate(signalNumber, frame):
-    sys.exit()
-
 if __name__ == "__main__":
-    run = True
-    signal.signal(signal.SIGTERM, terminate)
-    #signal.signal(signal.SIGINT, terminate)
-    devices = {dev.fd: dev for dev in map(InputDevice, KEYBOARDS)}
-    if DEBUG:
-        for dev in devices.values(): print(dev)
-    grab_keyboards()
-    try:        
+    signal.signal(signal.SIGTERM, lambda signalNumber, frame: sys.exit())
+    
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c','--config', default=config_path, help='Path to config file. Defaults to {}'.format(DEFAULT_CONFIG_NAME))
+    parser.add_argument('-v','--verbose', default=config_path,action='store_true', help='Verbose logging')
+    parser.add_argument('-k','--keys', default=config_path,action='store_true', help='Print key events')
+    args = parser.parse_args()
+    if(args.verbose):
+        logging.basicConfig(level=logging.INFO)
+    else:
+         logging.basicConfig(level=logging.WARN)
+    if(args.keys):
+        print_key_events = True   
+    kbd_paths = []
+    
+    config = configparser.ConfigParser()
+    config.read(os.path.join(os.path.dirname(__file__), args.config))
+    for section_name in config.sections():
+        section = config[section_name] 
+        if section_name == 'moonraker':
+            host = section.get('host','127.0.0.1').strip()
+        elif section_name == 'keyboards':
+            paths = config.items(section_name)
+            for key, path in paths:
+                kbd_paths.append(path.strip())
+        elif section_name.startswith('key'):
+            keycode = section_name.split()[1]
+            alist=[]
+            for key in section:
+                (action, sep, posfix) = key.partition("_")
+                arg = section.get(key)
+                alist.append((posfix, action, arg))
+            alist.sort(key=lambda x:x[0])
+            mapping[keycode] = [(action, arg) for (posfix, action, arg) in alist]
+            
+    devices = {dev.fd: dev for dev in map(InputDevice, kbd_paths)}
+    for dev in devices.values(): logging.debug(dev)
+    try: 
+        grab_keyboards()       
         while True:
             r, w, x = select.select(devices, [], [])
             for fd in r:
@@ -109,9 +123,7 @@ if __name__ == "__main__":
                     elif event.type == ecodes.EV_MSC:	
                         pass #scancodes, ignore
                     else:
-                        if DEBUG_PRINT_UNKNOWN_EVENTS:
-                            print("WOW! New event type!:")
-                            print(categorize(event))
+                        logging.warning("Unknown event type: {}".format(categorize(event)))
     except (KeyboardInterrupt,SystemExit):
         pass
     finally:
