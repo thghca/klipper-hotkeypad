@@ -28,15 +28,24 @@ A python script to control klipper wuth usb numpad
 
 ```
 [moonraker]
-#hostname of machine with moonraker
+# Hostname of machine with moonraker
 host: 127.0.0.1
 
-#List of input devices. Some numpad has more then one
+# List of input devices. Some numpad has more then one
 [keyboards]
 path_1: /dev/input/by-id/usb-SIGMACHIP_USB_Keyboard-event-kbd
 path_2: /dev/input/by-id/usb-SIGMACHIP_USB_Keyboard-event-if01
 
-#Key configs
+# Variables for storing data between events 
+[variables]
+variable: value
+flist_floats: 1, 10, 100
+int_integer: 0
+# "flist_" prefix for comma-separated list of floats
+# "int_" prefix for integer
+# others threated as strings
+
+# Key configs
 [key KEYCODE]
 #up:
 #down:
@@ -63,10 +72,19 @@ KEY_DEFAULT may be used for all keys not defined in config file.
 * Print in terminal:  
   `{{ action_print("print") }}`
 
-#### Context variables:
+#### Context:
 
-* Keycode:  
-`context_keycode`
+* Keycode of event:  
+`event_keycode`
+* Get timestamp as float:  
+`event_timestamp()`
+
+#### Variables from [variables] section:
+
+* getting value:  
+  `{% set x = vars['x'] %}`
+* setting value:  
+  `{% set t = vars.__setitem__('x', 123) %}`
 
 ## Notes
 
@@ -78,5 +96,6 @@ KEY_DEFAULT may be used for all keys not defined in config file.
 
 ## changelog
 
+* 0.2.1 add variables
 * 0.2.0 move to jinja2
 * 0.1.0 "it works"
